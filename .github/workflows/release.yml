@@ -66,7 +66,7 @@ jobs:
               run: |
                   set -euo pipefail
                   TAG="${GITHUB_REF_NAME}"
-                  ARCHIVE="x-checker-${TAG}.tar.gz"
+                  ARCHIVE="x-checker-${TAG}.zip"
 
                   # Archive current workspace contents (exclude git metadata and typical junk)
                       cd "${GITHUB_WORKSPACE}"
