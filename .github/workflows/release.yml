@@ -1,0 +1,84 @@
+name: Build & Upload Release Archive
+
+on:
+    push:
+        tags:
+            - "*"
+
+permissions:
+    contents: write
+
+jobs:
+    release:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout (full history)
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Ensure tagged commit is on main
+              shell: bash
+              run: |
+                  set -euo pipefail
+
+                  # Make sure we have origin/main
+                  git fetch origin main:refs/remotes/origin/main
+
+                  TAG_SHA="${GITHUB_SHA}"
+
+                  # If TAG_SHA is NOT reachable from origin/main, skip.
+                  if git merge-base --is-ancestor "$TAG_SHA" "origin/main"; then
+                    echo "Tagged commit is on main. Continue."
+                  else
+                    echo "Tagged commit is NOT on main. Skip release."
+                    exit 0
+                  fi
+
+            - name: Setup Bun
+              uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: latest
+
+            - name: "bun install & build (cwd: viewer)"
+              working-directory: viewer
+              run: |
+                  bun install --frozen-lockfile
+                  bun run build
+
+            - name: Restructure folders
+              shell: bash
+              run: |
+                  set -euo pipefail
+
+                  # viewer/dist -> ./dist
+                  mv viewer/dist ./dist
+
+                  # remove viewer
+                  rm -rf viewer
+
+                  # dist -> viewer
+                  mv ./dist ./viewer
+
+            - name: Create archive of repository root
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  TAG="${GITHUB_REF_NAME}"
+                  ARCHIVE="viewer-${TAG}.tar.gz"
+
+                  # Archive current workspace contents (exclude git metadata and typical junk)
+                  tar \
+                    -czf "${ARCHIVE}" \
+                    .
+
+                  echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
+
+            - name: Upload to GitHub Release (create if missing)
+              uses: softprops/action-gh-release@v2
+              with:
+                  tag_name: ${{ github.ref_name }}
+                  name: ${{ github.ref_name }}
+                  files: ${{ env.ARCHIVE }}
+                  generate_release_notes: true
