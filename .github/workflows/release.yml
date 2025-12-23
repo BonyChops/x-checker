@@ -69,15 +69,13 @@ jobs:
                   ARCHIVE="viewer-${TAG}.tar.gz"
 
                   # Archive current workspace contents (exclude git metadata and typical junk)
-                  tar \
-                        --exclude=".git" \
-                        --exclude=".github" \
-                        -czf "/tmp/${ARCHIVE}" \
-                        -C "${GITHUB_WORKSPACE}" \
-                        .
+                      cd "${GITHUB_WORKSPACE}"
+                      zip -r "/tmp/${ARCHIVE}" . \
+                        -x ".git/*" \
+                        -x ".github/*" \
 
-                  mv "/tmp/${ARCHIVE}" "${GITHUB_WORKSPACE}/${ARCHIVE}"
-                  echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
+                      mv "/tmp/${ARCHIVE}" "${GITHUB_WORKSPACE}/${ARCHIVE}"
+                      echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
 
             - name: Upload to GitHub Release (create if missing)
               uses: softprops/action-gh-release@v2
