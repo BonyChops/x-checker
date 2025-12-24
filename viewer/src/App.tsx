@@ -55,23 +55,37 @@ function makeLink(id: string) {
 	return `https://x.com/x/status/${encodeURIComponent(id)}`;
 }
 
-function ResultsTable({ resource }: { resource: Resource<ResultTuple[]> }) {
+function ResultsTable({
+	resource,
+	disableVirtualization,
+}: {
+	resource: Resource<ResultTuple[]>;
+	disableVirtualization: boolean;
+}) {
 	const data = resource.read();
 	const parentRef = useRef<HTMLDivElement | null>(null);
 
+	// ✅ virtualizer は「使う時だけ」初期化（無効時は最低限の描画にする）
 	const rowVirtualizer = useVirtualizer({
 		count: data.length,
 		getScrollElement: () => parentRef.current,
 		estimateSize: () => 44,
 		overscan: 10,
+		enabled: !disableVirtualization, // ✅ tanstack/react-virtual の enabled を利用
 	});
 
-	const virtualItems = rowVirtualizer.getVirtualItems();
-	const totalSize = rowVirtualizer.getTotalSize();
+	const virtualItems = disableVirtualization
+		? [] // 使わない
+		: rowVirtualizer.getVirtualItems();
 
-	const paddingTop = virtualItems.length > 0 ? virtualItems[0].start : 0;
+	const totalSize = disableVirtualization ? 0 : rowVirtualizer.getTotalSize();
+
+	const paddingTop =
+		!disableVirtualization && virtualItems.length > 0
+			? virtualItems[0].start
+			: 0;
 	const paddingBottom =
-		virtualItems.length > 0
+		!disableVirtualization && virtualItems.length > 0
 			? totalSize - virtualItems[virtualItems.length - 1].end
 			: 0;
 
@@ -117,10 +131,9 @@ function ResultsTable({ resource }: { resource: Resource<ResultTuple[]> }) {
 					</tr>
 				</thead>
 
-				{/* ✅ tbody は block にしない */}
 				<tbody>
-					{/* ✅ 上の空白（スペーサー） */}
-					{paddingTop > 0 && (
+					{/* ✅ virtual 有効時だけスペーサー */}
+					{!disableVirtualization && paddingTop > 0 && (
 						<tr>
 							<td
 								colSpan={4}
@@ -129,29 +142,46 @@ function ResultsTable({ resource }: { resource: Resource<ResultTuple[]> }) {
 						</tr>
 					)}
 
-					{/* ✅ 実データ行は普通に描画 */}
-					{virtualItems.map((v) => {
-						const [id, content, score] = data[v.index];
-						return (
-							<tr key={v.key} style={trStyle}>
-								<td style={tdStyle()} title={id}>
-									{id}
-								</td>
-								<td style={tdStyle()} title={content}>
-									{content}
-								</td>
-								<td style={tdStyle()}>{score}</td>
-								<td style={tdStyle()}>
-									<a href={makeLink(id)} target="_blank" rel="noreferrer">
-										LINK
-									</a>
-								</td>
-							</tr>
-						);
-					})}
+					{/* ✅ 分岐：virtual / 全件 */}
+					{disableVirtualization
+						? data.map(([id, content, score]) => (
+								<tr key={id} style={trStyle}>
+									<td style={tdStyle()} title={id}>
+										{id}
+									</td>
+									<td style={tdStyle()} title={content}>
+										{content}
+									</td>
+									<td style={tdStyle()}>{score}</td>
+									<td style={tdStyle()}>
+										<a href={makeLink(id)} target="_blank" rel="noreferrer">
+											LINK
+										</a>
+									</td>
+								</tr>
+							))
+						: virtualItems.map((v) => {
+								const [id, content, score] = data[v.index];
+								return (
+									<tr key={v.key} style={trStyle}>
+										<td style={tdStyle()} title={id}>
+											{id}
+										</td>
+										<td style={tdStyle()} title={content}>
+											{content}
+										</td>
+										<td style={tdStyle()}>{score}</td>
+										<td style={tdStyle()}>
+											<a href={makeLink(id)} target="_blank" rel="noreferrer">
+												LINK
+											</a>
+										</td>
+									</tr>
+								);
+							})}
 
-					{/* ✅ 下の空白（スペーサー） */}
-					{paddingBottom > 0 && (
+					{/* ✅ virtual 有効時だけスペーサー */}
+					{!disableVirtualization && paddingBottom > 0 && (
 						<tr>
 							<td
 								colSpan={4}
@@ -210,6 +240,9 @@ export default function App() {
 
 	const [sortKey, setSortKey] = useState<SortKey>("time");
 	const [order, setOrder] = useState<SortOrder>("desc");
+
+	// ✅ 追加：virtual化の無効フラグ
+	const [disableVirtualization, setDisableVirtualization] = useState(false);
 
 	const [error, setError] = useState<string | null>(null);
 	const [resource, setResource] = useState<Resource<ResultTuple[]> | null>(
@@ -271,9 +304,6 @@ export default function App() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [sortKey, order]);
 
-	// WorkerエラーをUIに出す（Suspense境界内で投げられたErrorをここで受けないので、fallbackとは別で表示したい場合）
-	// → wrapPromise内でthrowされたErrorは ErrorBoundary が必要。
-	// ここでは最小構成として、resource.read() で投げられるErrorをキャッチする ErrorBoundary を自前で用意します。
 	return (
 		<div
 			style={{
@@ -281,7 +311,7 @@ export default function App() {
 				fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
 			}}
 		>
-			<h1 style={{ margin: "0 0 12px" }}>Results</h1>
+			<h1 style={{ margin: "0 0 12px" }}>x-checker viewer</h1>
 
 			<div
 				style={{
@@ -289,6 +319,7 @@ export default function App() {
 					gap: 12,
 					alignItems: "center",
 					marginBottom: 12,
+					flexWrap: "wrap",
 				}}
 			>
 				<label style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -312,6 +343,16 @@ export default function App() {
 						<option value="desc">降順</option>
 					</select>
 				</label>
+
+				{/* ✅ 追加：checkbox */}
+				<label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+					<input
+						type="checkbox"
+						checked={disableVirtualization}
+						onChange={(e) => setDisableVirtualization(e.target.checked)}
+					/>
+					<span>描画の最適化を無効 (Ctrl + F 用)</span>
+				</label>
 			</div>
 
 			<ErrorBoundary onError={(msg) => setError(msg)}>
@@ -319,7 +360,10 @@ export default function App() {
 					fallback={<div style={{ padding: 12 }}>読み込んでいます...</div>}
 				>
 					{resource ? (
-						<ResultsTable resource={resource} />
+						<ResultsTable
+							resource={resource}
+							disableVirtualization={disableVirtualization}
+						/>
 					) : (
 						<div style={{ padding: 12 }}>初期化中...</div>
 					)}
@@ -331,10 +375,6 @@ export default function App() {
 					results.jsonの読み込み/処理に失敗しました: {error}
 				</div>
 			) : null}
-
-			<div style={{ marginTop: 12, fontSize: 12, color: "#666" }}>
-				※ results.json の読み込み/ソートは Web Worker で実行します。
-			</div>
 		</div>
 	);
 }
@@ -354,7 +394,6 @@ class ErrorBoundary extends React.Component<
 	}
 
 	componentDidUpdate(prevProps: any) {
-		// 次の試行で復帰できるように
 		if (this.state.hasError && prevProps.children !== this.props.children) {
 			// eslint-disable-next-line react/no-did-update-set-state
 			this.setState({ hasError: false });
