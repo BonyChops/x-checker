@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from openai import AsyncOpenAI
 from tqdm import tqdm
 
+from client import get_client
+
 
 # ---------- tweets.js の読み込み & パース ----------
 
@@ -128,10 +130,7 @@ async def main():
     # api_key = os.environ.get("OPENAI_API_KEY")
     # if not api_key:
     #     raise RuntimeError("環境変数 OPENAI_API_KEY が設定されていません。")
-    client = AsyncOpenAI(
-        base_url = 'http://localhost:11434/v1',
-        api_key='ollama'
-    )
+    client = get_client()
 
     # tweets 読み込み
     raw_items = load_tweets_from_js(TWEETS_JS_PATH)
